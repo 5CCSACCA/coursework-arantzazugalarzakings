@@ -7,3 +7,4 @@ my_venv/
 *.pyc 
 
 *.log 
+get-pip.py
