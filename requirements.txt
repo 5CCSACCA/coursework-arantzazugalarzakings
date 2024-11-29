@@ -1,9 +1,0 @@
-fastapi 
-uvicorn 
-mlflow 
-transformers 
-torch
-motor
-pymongo
-passlib[bcrypt]
-python-jose
