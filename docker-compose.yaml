@@ -14,6 +14,7 @@ services:
     networks: 
       - app-network
 
+
   auth-service:
     build:
       context: ./auth_service
@@ -27,6 +28,7 @@ services:
     networks: 
       - app-network
 
+
   model-service:
     build:
       context: ./model_service
@@ -35,8 +37,6 @@ services:
       - "8000:8000"
     depends_on:
       - auth-service
-    environment:
-      - AUTH_SERVICE_URL=http://auth-service:8001
     networks: 
       - app-network
 
@@ -49,9 +49,6 @@ services:
     depends_on:
       - auth-service
       - model-service
-    environment:
-      - AUTH_SERVICE_URL=http://auth-service:8001
-      - MODEL_SERVICE_URL=http://model-service:8000
     networks: 
       - app-network
 

@@ -30,7 +30,15 @@ def token(data: AuthInput):
 
 @app.post("/predict/")
 def predict(data: TextInput, authorization: str = Header(...)):
-    response = requests.post(f"{MODEL_SERVICE_URL}/predict/", json=data.dict(), headers={"Authorization": authorization})
+    response = requests.post(
+        f"{MODEL_SERVICE_URL}/predict/",
+        json=data.dict(),
+        headers={"Authorization": authorization},
+    )
     if response.status_code == 200:
         return response.json()
     raise HTTPException(status_code=response.status_code, detail=response.text)
+
+@app.get("/health/")
+def health_check():
+    return {"status": "ok"}
