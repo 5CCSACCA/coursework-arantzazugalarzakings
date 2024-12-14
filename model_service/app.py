@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, BackgroundTasks
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from transformers import pipeline
 import httpx
+from fine_tune import fine_tune_model
 
 # FastAPI app
 app = FastAPI()
@@ -56,6 +57,14 @@ async def predict_emotion(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+@app.post("/fine-tune/")
+async def fine_tune(background_tasks: BackgroundTasks):
+    """
+    Endpoint to trigger model fine-tuning.
+    """
+    background_tasks.add_task(fine_tune_model)  # Run fine-tuning in the background
+    return {"message": "Fine-tuning started. Check MLflow for progress."}
 
 @app.get("/health/")
 async def health_check():
