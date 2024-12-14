@@ -1,0 +1,15 @@
+__pycache__/
+
+my_venv/ 
+
+.DS_Store
+
+*.pyc 
+
+*.log 
+get-pip.py
+
+.history/
+
+exporting
+
