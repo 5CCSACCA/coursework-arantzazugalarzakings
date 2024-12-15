@@ -1,6 +1,5 @@
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Form, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
@@ -21,9 +20,6 @@ bearer_scheme = HTTPBearer()
 
 # Helper functions
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    """
-    Generate a JWT access token.
-    """
     if "sub" not in data:
         raise ValueError("Token payload must include 'sub'")
     to_encode = data.copy()
@@ -32,9 +28,6 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def decode_access_token(token: str):
-    """
-    Decode the JWT token and validate it.
-    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -44,53 +37,37 @@ def decode_access_token(token: str):
     except JWTError:
         raise HTTPException(status_code=403, detail="Invalid or expired token")
 
-# Schemas
-class SignUpInput(BaseModel):
-    username: str
-    password: str
-
-class LoginInput(BaseModel):
-    username: str
-    password: str
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-@app.post("/signup/")
-async def signup(input: SignUpInput):
+@app.post("/signup/", summary="Register a new user")
+async def signup(username: str = Form(...), password: str = Form(...)):
     """
-    Endpoint to handle user signup.
+    Register a new user by providing a username and password.
     """
-    # Placeholder implementation (database integration can be added later)
-    hashed_password = pwd_context.hash(input.password)
-    return {"message": f"User {input.username} has been registered successfully", "password_hash": hashed_password}
+    hashed_password = pwd_context.hash(password)
+    return {"message": f"User {username} has been registered successfully", "password_hash": hashed_password}
 
-@app.post("/login/", response_model=Token)
-async def login(input: LoginInput):
+@app.post("/login/", summary="Login user")
+async def login(username: str = Form(...), password: str = Form(...)):
     """
-    Endpoint to handle user login and return a JWT token.
+    Login with username and password to obtain a JWT token.
     """
-    # Placeholder: Assume all users are valid for demonstration
     access_token = create_access_token(
-        data={"sub": input.username},
+        data={"sub": username},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.get("/whoami/", response_model=dict)
+@app.get("/whoami/", summary="Validate token")
 async def whoami(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
     """
-    Endpoint to validate the JWT and return the username.
-    Uses Authorization: Bearer <token> header.
+    Validate the JWT token and return the username.
     """
     token = credentials.credentials
     username = decode_access_token(token)
     return {"username": username}
 
-@app.get("/health/")
+@app.get("/health/", summary="Health Check")
 async def health_check():
     """
-    Health check endpoint to ensure the service is running.
+    Check the service health.
     """
     return {"status": "ok"}

@@ -1,16 +1,17 @@
-from fastapi import FastAPI, HTTPException, Depends, Query, BackgroundTasks, Security
+from fastapi import FastAPI, HTTPException, Depends, Form, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-import httpx
 import os
-from fine_tune import fine_tune_model
 from database import save_prediction, get_statistics, get_user_history
 
 # FastAPI app
 app = FastAPI()
 
-# Bearer token scheme for authentication
+# Constants
+AUTH_SERVICE_URL = "http://auth-service:8001"
+
+# Security scheme for Swagger UI
 bearer_scheme = HTTPBearer()
 
 # Dynamic model loading
@@ -31,58 +32,56 @@ except Exception as e:
     )
     print(f"Using default model: {str(e)}")
 
-# Schemas
-class TextInput(BaseModel):
-    text: str
-
-AUTH_SERVICE_URL = "http://auth-service:8001"
-
-# Helper function to validate token with Auth Service
-async def validate_token(credentials: HTTPAuthorizationCredentials = Security(bearer_scheme)):
+# Helper functions
+async def validate_token(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
     """
-    Validate the Bearer token with the auth-service's /whoami/ endpoint.
+    Validate the token using the Auth Service.
     """
+    import httpx
     token = credentials.credentials
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(
+            response = await client.post(
                 f"{AUTH_SERVICE_URL}/whoami/",
-                headers={"Authorization": f"Bearer {token}"}
+                headers={"Authorization": f"Bearer {token}"},
             )
             response.raise_for_status()
             return response.json()["username"]
-    except httpx.HTTPStatusError:
+    except Exception as e:
         raise HTTPException(status_code=403, detail="Invalid or expired token")
-    except httpx.RequestError:
-        raise HTTPException(status_code=500, detail="Error connecting to Auth Service")
 
 # Endpoints
-@app.post("/predict-emotions/")
-async def predict_emotion(input: TextInput, username: str = Depends(validate_token)):
+
+@app.post("/predict/", summary="Predict Emotion")
+async def predict_emotion(
+    text: str = Form(..., description="Input text to analyze for emotions"),
+    username: str = Depends(validate_token),
+):
     """
-    Predict the emotion of the input text.
+    Predict the emotion of the given text and store it in the database.
     """
     try:
-        prediction = emotion_classifier(input.text)
+        prediction = emotion_classifier(text)
         emotion = prediction[0]["label"]
         confidence = prediction[0]["score"]
 
-        # Save the prediction in MongoDB
-        save_prediction(username, input.text, emotion, confidence)
+        # Save to database
+        save_prediction(username, text, emotion, confidence)
 
         return {
             "username": username,
-            "text": input.text,
+            "text": text,
             "emotion": emotion,
             "confidence": confidence
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
-@app.get("/statistics-emotions/")
-async def get_statistics_endpoint(username: str = Depends(validate_token)):
+
+@app.get("/stats/", summary="Retrieve Emotion Statistics")
+async def get_emotion_statistics(username: str = Depends(validate_token)):
     """
-    Retrieve overall statistics for predictions.
+    Retrieve overall statistics for emotions detected.
     """
     try:
         stats = get_statistics()
@@ -90,10 +89,13 @@ async def get_statistics_endpoint(username: str = Depends(validate_token)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve statistics: {str(e)}")
 
-@app.get("/emotions-history/")
-async def get_user_history_endpoint(username: str = Depends(validate_token)):
+
+@app.get("/history/", summary="Retrieve User Emotion History")
+async def get_emotion_history(
+    username: str = Depends(validate_token),
+):
     """
-    Retrieve user-specific emotion prediction history.
+    Retrieve the history of emotions detected for the logged-in user.
     """
     try:
         history = get_user_history(username)
@@ -101,20 +103,10 @@ async def get_user_history_endpoint(username: str = Depends(validate_token)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve history: {str(e)}")
 
-@app.post("/fine-tune/")
-async def fine_tune(background_tasks: BackgroundTasks, username: str = Depends(validate_token)):
-    """
-    Trigger model fine-tuning in the background.
-    """
-    try:
-        background_tasks.add_task(fine_tune_model)
-        return {"message": "Fine-tuning started. Check MLflow for progress."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Fine-tuning failed: {str(e)}")
 
-@app.get("/health/")
+@app.get("/health/", summary="Health Check")
 async def health_check():
     """
-    Check the health of the service.
+    Check the service health.
     """
     return {"status": "ok"}
