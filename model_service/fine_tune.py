@@ -9,21 +9,20 @@ from transformers import (
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import numpy as np
 
-
 def fine_tune_model():
     # Initialize MLflow
-    mlflow.set_tracking_uri("file:///tmp/mlruns")  # Adjust to your MLflow tracking URI
+    mlflow.set_tracking_uri("file:///tmp/mlruns")  # Adjust this to your MLflow tracking URI
     mlflow.set_experiment("Emotion Detection Fine-Tuning")
 
     # Load dataset
     dataset = load_dataset("emotion")
 
     # Preprocess the data
+    tokenizer = AutoTokenizer.from_pretrained("j-hartmann/emotion-english-distilroberta-base")
+
     def preprocess_function(examples):
-        tokenizer = AutoTokenizer.from_pretrained("j-hartmann/emotion-english-distilroberta-base")
         return tokenizer(examples["text"], truncation=True, padding=True, max_length=128)
 
-    tokenizer = AutoTokenizer.from_pretrained("j-hartmann/emotion-english-distilroberta-base")
     encoded_dataset = dataset.map(preprocess_function, batched=True)
 
     # Prepare data splits
@@ -44,15 +43,15 @@ def fine_tune_model():
     # Fine-tuning parameters
     training_args = TrainingArguments(
         output_dir="./results",
-        evaluation_strategy="epoch",  # Ensure evaluation happens at the end of each epoch
-        save_strategy="epoch",        # Align save strategy with evaluation strategy
+        evaluation_strategy="epoch",
         learning_rate=2e-5,
         per_device_train_batch_size=16,
         per_device_eval_batch_size=16,
-        num_train_epochs=1,           # Minimal epochs for demonstration
+        num_train_epochs=1,  # Minimal epochs for demonstration
         logging_dir="./logs",
         logging_steps=10,
-        load_best_model_at_end=True,  # Load the best model at the end of training
+        save_steps=10,
+        load_best_model_at_end=True,
         metric_for_best_model="accuracy",
     )
 

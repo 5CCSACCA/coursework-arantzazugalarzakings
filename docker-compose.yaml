@@ -32,8 +32,10 @@ services:
     ports:
       - "8000:8000"
     depends_on:
+      - mongodb
       - auth-service
     environment:
+      - MONGO_URI=mongodb://root:example@mongodb:27017/emotion_service?authSource=admin
       - MLFLOW_TRACKING_URI=file:///tmp/mlruns
     volumes:
       - mlruns_data:/tmp/mlruns
@@ -58,4 +60,4 @@ networks:
 
 volumes:
   mongodb_data:
-  mlruns_data:  # Define the missing volume for MLflow logs
+  mlruns_data:

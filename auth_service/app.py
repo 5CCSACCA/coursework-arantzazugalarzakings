@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -15,8 +16,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Security scheme for Swagger UI
+bearer_scheme = HTTPBearer()
+
 # Helper functions
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    """
+    Generate a JWT access token.
+    """
     if "sub" not in data:
         raise ValueError("Token payload must include 'sub'")
     to_encode = data.copy()
@@ -25,6 +32,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def decode_access_token(token: str):
+    """
+    Decode the JWT token and validate it.
+    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -47,32 +57,40 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-class TokenRequest(BaseModel):
-    token: str
-
 @app.post("/signup/")
 async def signup(input: SignUpInput):
-    return {"message": f"User {input.username} registered successfully"}
+    """
+    Endpoint to handle user signup.
+    """
+    # Placeholder implementation (database integration can be added later)
+    hashed_password = pwd_context.hash(input.password)
+    return {"message": f"User {input.username} has been registered successfully", "password_hash": hashed_password}
 
-@app.post("/token/", response_model=Token)
+@app.post("/login/", response_model=Token)
 async def login(input: LoginInput):
+    """
+    Endpoint to handle user login and return a JWT token.
+    """
+    # Placeholder: Assume all users are valid for demonstration
     access_token = create_access_token(
         data={"sub": input.username},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/user/", response_model=dict)
-async def get_user(request: TokenRequest):
-    try:
-        payload = jwt.decode(request.token, SECRET_KEY, algorithms=[ALGORITHM])
-        username = payload.get("sub")
-        if not username:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        return {"username": username}
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Token is invalid or expired")
+@app.get("/whoami/", response_model=dict)
+async def whoami(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    """
+    Endpoint to validate the JWT and return the username.
+    Uses Authorization: Bearer <token> header.
+    """
+    token = credentials.credentials
+    username = decode_access_token(token)
+    return {"username": username}
 
 @app.get("/health/")
 async def health_check():
+    """
+    Health check endpoint to ensure the service is running.
+    """
     return {"status": "ok"}
