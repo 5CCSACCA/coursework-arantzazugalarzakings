@@ -1,9 +1,9 @@
-from fastapi import FastAPI, HTTPException, Depends, Security
+from fastapi import FastAPI, HTTPException, Depends, Security, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
 import requests
 
+# FastAPI app
 app = FastAPI()
 
 # External service URLs
@@ -13,92 +13,97 @@ MODEL_SERVICE_URL = "http://model-service:8000"
 # Security: Bearer Token
 security = HTTPBearer()
 
-# Schemas for requests and responses
-class AuthInput(BaseModel):
-    username: str
-    password: str
-
+# Schemas
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
 
-class TextInput(BaseModel):
+class PredictEmotionResponse(BaseModel):
+    username: str
     text: str
+    emotion: str
+    confidence: float
 
-# Helper function to validate token via auth-service
+# Helper function to forward requests to services
+def forward_request(service_url: str, endpoint: str, method: str = "POST", data: dict = None, headers: dict = None):
+    url = f"{service_url}{endpoint}"
+    try:
+        response = requests.request(method, url, data=data, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.HTTPError as http_err:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error connecting to {url}: {str(e)}")
+
+# Validate token function
 def validate_token(credentials: HTTPAuthorizationCredentials = Security(security)):
+    """
+    Validate token by calling the Auth Service's /whoami/ endpoint.
+    """
     token = credentials.credentials
-    response = requests.post(f"{AUTH_SERVICE_URL}/user/", json={"token": token})
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.post(f"{AUTH_SERVICE_URL}/whoami/", headers=headers)
     if response.status_code == 200:
         return response.json()["username"]
-    raise HTTPException(status_code=401, detail="Unauthorized: Invalid or expired token.")
+    raise HTTPException(status_code=403, detail="Invalid or expired token.")
 
 # Authentication Endpoints
 @app.post("/signup/", tags=["Authentication"])
-def signup(data: AuthInput):
+def signup(username: str = Form(...), password: str = Form(...)):
     """
     User signup endpoint.
     """
-    response = requests.post(f"{AUTH_SERVICE_URL}/signup/", json=data.dict())
-    if response.status_code == 200:
-        return response.json()
-    raise HTTPException(status_code=response.status_code, detail=response.text)
+    return forward_request(AUTH_SERVICE_URL, "/signup/", data={"username": username, "password": password})
 
-@app.post("/token/", response_model=TokenResponse, tags=["Authentication"])
-def token(data: AuthInput):
+@app.post("/login/", response_model=TokenResponse, tags=["Authentication"])
+def login(username: str = Form(...), password: str = Form(...)):
     """
-    Generate authentication token.
+    User login endpoint.
     """
-    response = requests.post(f"{AUTH_SERVICE_URL}/token/", json=data.dict())
-    if response.status_code == 200:
-        return response.json()
-    raise HTTPException(status_code=response.status_code, detail=response.text)
+    return forward_request(AUTH_SERVICE_URL, "/login/", data={"username": username, "password": password})
+
+@app.post("/whoami/", tags=["Authentication"])
+def whoami(credentials: HTTPAuthorizationCredentials = Security(security)):
+    """
+    Validate and return username from the token.
+    """
+    token = credentials.credentials
+    headers = {"Authorization": f"Bearer {token}"}
+    return forward_request(AUTH_SERVICE_URL, "/whoami/", method="POST", headers=headers)
 
 # Emotion Detection Endpoints
-@app.post("/predict/", tags=["Emotion Detection"])
-def predict(data: TextInput, username: str = Depends(validate_token)):
+@app.post("/predict-emotions/", response_model=PredictEmotionResponse, tags=["Emotion Detection"])
+def predict_emotion(text: str = Form(...), credentials: HTTPAuthorizationCredentials = Security(security)):
     """
     Predict emotion from text.
     """
-    response = requests.post(
-        f"{MODEL_SERVICE_URL}/predict/",
-        json=data.dict(),
-        headers={"Authorization": f"Bearer {username}"},  # Forward the validated token
-    )
-    if response.status_code == 200:
-        return response.json()
-    raise HTTPException(status_code=response.status_code, detail=response.text)
+    token = credentials.credentials
+    headers = {"Authorization": f"Bearer {token}"}
+    return forward_request(MODEL_SERVICE_URL, "/predict/", data={"text": text}, headers=headers)
 
-@app.get("/health/", tags=["Emotion Detection"])
+@app.get("/statistics-emotions/", tags=["Emotion Detection"])
+def get_statistics(credentials: HTTPAuthorizationCredentials = Security(security)):
+    """
+    Get emotion statistics.
+    """
+    token = credentials.credentials
+    headers = {"Authorization": f"Bearer {token}"}
+    return forward_request(MODEL_SERVICE_URL, "/stats/", method="GET", headers=headers)
+
+@app.get("/history-emotions/", tags=["Emotion Detection"])
+def get_user_history(credentials: HTTPAuthorizationCredentials = Security(security)):
+    """
+    Retrieve user's emotion history.
+    """
+    token = credentials.credentials
+    headers = {"Authorization": f"Bearer {token}"}
+    return forward_request(MODEL_SERVICE_URL, "/history/", method="GET", headers=headers)
+
+# Health Check Endpoint
+@app.get("/health/", tags=["Health Check"])
 def health_check():
     """
-    Health check for the service.
+    Health check for the API Gateway.
     """
     return {"status": "ok"}
-
-# Custom OpenAPI Schema for Titles
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-    openapi_schema = get_openapi(
-        title="API Gateway",
-        version="1.0.0",
-        description="This API Gateway manages user authentication and emotion detection requests.",
-        routes=app.routes,
-    )
-    openapi_schema["components"]["securitySchemes"] = {
-        "BearerAuth": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-        }
-    }
-    openapi_schema["security"] = [{"BearerAuth": []}]
-    openapi_schema["tags"] = [
-        {"name": "Authentication", "description": "Endpoints for user authentication and token management"},
-        {"name": "Emotion Detection", "description": "Endpoints for emotion detection tasks"},
-    ]
-    app.openapi_schema = openapi_schema
-    return app.openapi_schema
-
-app.openapi = custom_openapi

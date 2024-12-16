@@ -18,8 +18,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Security scheme for Swagger UI
 bearer_scheme = HTTPBearer()
 
-# Helper functions
+# Helper function to create access token
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    """
+    Create a JWT token for the user.
+    """
     if "sub" not in data:
         raise ValueError("Token payload must include 'sub'")
     to_encode = data.copy()
@@ -27,7 +30,11 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+# Helper function to decode token
 def decode_access_token(token: str):
+    """
+    Decode the JWT token and retrieve the username.
+    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -37,6 +44,7 @@ def decode_access_token(token: str):
     except JWTError:
         raise HTTPException(status_code=403, detail="Invalid or expired token")
 
+# Endpoints
 @app.post("/signup/", summary="Register a new user")
 async def signup(username: str = Form(...), password: str = Form(...)):
     """
@@ -56,7 +64,7 @@ async def login(username: str = Form(...), password: str = Form(...)):
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.get("/whoami/", summary="Validate token")
+@app.post("/whoami/", summary="Validate token")
 async def whoami(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
     """
     Validate the JWT token and return the username.
