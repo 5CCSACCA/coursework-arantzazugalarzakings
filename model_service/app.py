@@ -1,62 +1,75 @@
-from fastapi import FastAPI, HTTPException, Header, Depends
-from fastapi.security import APIKeyHeader
-from pydantic import BaseModel
-from transformers import pipeline
+from fastapi import FastAPI, HTTPException, Depends, Form
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+from database import save_prediction, get_statistics, get_user_history
 import httpx
 
 # FastAPI app
 app = FastAPI()
 
-# Define the security scheme for the `Authorization` header
-api_key_header = APIKeyHeader(name="Authorization", auto_error=True)
+# Constants
+AUTH_SERVICE_URL = "http://auth-service:8001"
 
-# Load emotion classification model
-emotion_classifier = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base")
+# Security scheme
+bearer_scheme = HTTPBearer()
 
-# Schemas
-class TextInput(BaseModel):
-    text: str
+# Dynamic model loading
+MODEL_DIR = "./mlflow_model"
+try:
+    emotion_classifier = pipeline(
+        "text-classification",
+        model=AutoModelForSequenceClassification.from_pretrained(MODEL_DIR),
+        tokenizer=AutoTokenizer.from_pretrained(MODEL_DIR),
+    )
+    print("Fine-tuned model loaded successfully!")
+except Exception as e:
+    emotion_classifier = pipeline(
+        "text-classification",
+        model="j-hartmann/emotion-english-distilroberta-base"
+    )
+    print(f"Using default model: {str(e)}")
 
-AUTH_SERVICE_URL = "http://auth-service:8001"  # Update to the correct URL of your auth service
-
-# Helper function to validate token via Auth Service
-async def validate_token_with_auth_service(token: str):
-    try:
-        async with httpx.AsyncClient() as client:
+# Token validation function
+async def validate_token(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+    async with httpx.AsyncClient() as client:
+        token = credentials.credentials
+        try:
             response = await client.post(
-                f"{AUTH_SERVICE_URL}/user/",
-                json={"token": token},
+                f"{AUTH_SERVICE_URL}/whoami/",
+                headers={"Authorization": f"Bearer {token}"}
             )
             response.raise_for_status()
             return response.json()["username"]
-    except httpx.HTTPStatusError as http_err:
-        raise HTTPException(status_code=401, detail=f"Unauthorized: {http_err.response.text}")
-    except httpx.RequestError as err:
-        raise HTTPException(status_code=500, detail=f"Error connecting to Auth Service: {err}")
+        except httpx.HTTPStatusError:
+            raise HTTPException(status_code=403, detail="Invalid or expired token")
 
-@app.post("/predict/")
+# Endpoints
+@app.post("/detection-emotions/", summary="Predict Emotion")
 async def predict_emotion(
-    input: TextInput,
-    authorization: str = Depends(api_key_header),  # Use FastAPI's APIKeyHeader
+    text: str = Form(..., description="Input text to analyze for emotions"),
+    username: str = Depends(validate_token)
 ):
-    # Validate the token via the Auth Service
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=400, detail="Invalid Authorization header format. Expected 'Bearer <token>'.")
-    token = authorization.split(" ")[1]
-    username = await validate_token_with_auth_service(token)
-
-    # Perform emotion prediction
     try:
-        prediction = emotion_classifier(input.text)
-        return {
-            "username": username,
-            "text": input.text,
-            "emotion": prediction[0]["label"],
-            "confidence": prediction[0]["score"]
-        }
+        prediction = emotion_classifier(text)
+        emotion = prediction[0]["label"]
+        confidence = prediction[0]["score"]
+        save_prediction(username, text, emotion, confidence)
+        return {"username": username, "text": text, "emotion": emotion, "confidence": confidence}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
-@app.get("/health/")
-async def health_check():
-    return {"status": "ok"}
+@app.get("/statistics-emotions/", summary="Retrieve Emotion Statistics")
+async def get_emotion_statistics(username: str = Depends(validate_token)):
+    try:
+        stats = get_statistics()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve statistics: {str(e)}")
+
+@app.get("/history-emotions/", summary="Retrieve User Emotion History")
+async def get_emotion_history(username: str = Depends(validate_token)):
+    try:
+        history = get_user_history(username)
+        return history
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve history: {str(e)}")

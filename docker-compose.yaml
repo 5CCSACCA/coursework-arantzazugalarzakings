@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   mongodb:
     image: mongo:6.0
@@ -13,7 +11,11 @@ services:
       - mongodb_data:/data/db
     networks: 
       - app-network
-
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   auth-service:
     build:
@@ -36,9 +38,16 @@ services:
     ports:
       - "8000:8000"
     depends_on:
+      - mongodb
       - auth-service
+    environment:
+      - MONGO_URI=mongodb://root:example@mongodb:27017/emotion_service?authSource=admin
+      - MLFLOW_TRACKING_URI=file:///tmp/mlruns
+    volumes:
+      - mlruns_data:/tmp/mlruns
     networks: 
       - app-network
+   
 
   api-gateway:
     build:
@@ -52,9 +61,11 @@ services:
     networks: 
       - app-network
 
+
 networks:
   app-network:
     driver: bridge
 
 volumes:
   mongodb_data:
+  mlruns_data:
