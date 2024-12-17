@@ -58,52 +58,35 @@ def signup(username: str = Form(...), password: str = Form(...)):
 
 @app.post("/login/", response_model=TokenResponse, tags=["Authentication"])
 def login(username: str = Form(...), password: str = Form(...)):
-    """
-    User login endpoint.
-    """
+
     return forward_request(AUTH_SERVICE_URL, "/login/", data={"username": username, "password": password})
 
 @app.post("/whoami/", tags=["Authentication"])
 def whoami(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """
-    Validate and return username from the token.
-    """
+
     token = credentials.credentials
     headers = {"Authorization": f"Bearer {token}"}
     return forward_request(AUTH_SERVICE_URL, "/whoami/", method="POST", headers=headers)
 
 # Emotion Detection Endpoints
-@app.post("/predict-emotions/", response_model=PredictEmotionResponse, tags=["Emotion Detection"])
+@app.post("/detection-emotions/", response_model=PredictEmotionResponse, tags=["Emotion Detection"])
 def predict_emotion(text: str = Form(...), credentials: HTTPAuthorizationCredentials = Security(security)):
-    """
-    Predict emotion from text.
-    """
+ 
     token = credentials.credentials
     headers = {"Authorization": f"Bearer {token}"}
-    return forward_request(MODEL_SERVICE_URL, "/predict/", data={"text": text}, headers=headers)
+    return forward_request(MODEL_SERVICE_URL, "/detection-emotions/", data={"text": text}, headers=headers)
 
 @app.get("/statistics-emotions/", tags=["Emotion Detection"])
 def get_statistics(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """
-    Get emotion statistics.
-    """
+
     token = credentials.credentials
     headers = {"Authorization": f"Bearer {token}"}
-    return forward_request(MODEL_SERVICE_URL, "/stats/", method="GET", headers=headers)
+    return forward_request(MODEL_SERVICE_URL, "/statistics-emotions/", method="GET", headers=headers)
 
 @app.get("/history-emotions/", tags=["Emotion Detection"])
 def get_user_history(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """
-    Retrieve user's emotion history.
-    """
+
     token = credentials.credentials
     headers = {"Authorization": f"Bearer {token}"}
-    return forward_request(MODEL_SERVICE_URL, "/history/", method="GET", headers=headers)
+    return forward_request(MODEL_SERVICE_URL, "/history-emotions/", method="GET", headers=headers)
 
-# Health Check Endpoint
-@app.get("/health/", tags=["Health Check"])
-def health_check():
-    """
-    Health check for the API Gateway.
-    """
-    return {"status": "ok"}

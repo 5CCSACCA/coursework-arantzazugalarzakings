@@ -6,16 +6,13 @@ from datetime import datetime
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://root:example@mongodb:27017/emotion_service?authSource=admin")
 MONGO_DB_NAME = "emotion_service"
 
-# Initialize MongoDB client
+# Initialize MongoDB 
 client = MongoClient(MONGO_URI)
 db = client[MONGO_DB_NAME]
 predictions_collection = db["predictions"]
 
-# Helper functions
 def save_prediction(username: str, text: str, emotion: str, confidence: float):
-    """
-    Save a prediction to the database.
-    """
+
     predictions_collection.insert_one({
         "username": username,
         "text": text,
@@ -25,9 +22,7 @@ def save_prediction(username: str, text: str, emotion: str, confidence: float):
     })
 
 def get_statistics():
-    """
-    Retrieve overall statistics for predictions.
-    """
+ 
     total_predictions = predictions_collection.count_documents({})
     emotions_count = predictions_collection.aggregate([
         {"$group": {"_id": "$emotion", "count": {"$sum": 1}}}
@@ -41,9 +36,7 @@ def get_statistics():
     }
 
 def get_user_history(username: str):
-    """
-    Retrieve all predictions for a specific user.
-    """
+ 
     user_history = predictions_collection.find({"username": username}).sort("timestamp", -1)
     return [
         {

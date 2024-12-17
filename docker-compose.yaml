@@ -29,11 +29,7 @@ services:
       - MONGO_URI=mongodb://root:example@mongodb:27017/emotion_detection?authSource=admin
     networks: 
       - app-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health/"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+
 
   model-service:
     build:
@@ -51,11 +47,7 @@ services:
       - mlruns_data:/tmp/mlruns
     networks: 
       - app-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+   
 
   api-gateway:
     build:
@@ -68,11 +60,7 @@ services:
       - model-service
     networks: 
       - app-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health/"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+
 
 networks:
   app-network:

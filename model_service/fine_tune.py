@@ -17,7 +17,7 @@ def fine_tune_model():
     # Load dataset
     dataset = load_dataset("emotion")
 
-    # Preprocess the data
+    # data
     tokenizer = AutoTokenizer.from_pretrained("j-hartmann/emotion-english-distilroberta-base")
 
     def preprocess_function(examples):
@@ -25,14 +25,14 @@ def fine_tune_model():
 
     encoded_dataset = dataset.map(preprocess_function, batched=True)
 
-    # Prepare data splits
+    #  data splits
     train_dataset = encoded_dataset["train"].shuffle(seed=42).select(range(1000))  # Subset for demonstration
     test_dataset = encoded_dataset["test"].shuffle(seed=42).select(range(200))    # Subset for demonstration
 
     # Load the model
     model = AutoModelForSequenceClassification.from_pretrained("j-hartmann/emotion-english-distilroberta-base")
 
-    # Metric function
+    # Metrics
     def compute_metrics(eval_pred):
         predictions, labels = eval_pred
         preds = np.argmax(predictions, axis=1)
@@ -40,14 +40,14 @@ def fine_tune_model():
         acc = accuracy_score(labels, preds)
         return {"accuracy": acc, "f1": f1, "precision": precision, "recall": recall}
 
-    # Fine-tuning parameters
+    #  parameters
     training_args = TrainingArguments(
         output_dir="./results",
         evaluation_strategy="epoch",
         learning_rate=2e-5,
         per_device_train_batch_size=16,
         per_device_eval_batch_size=16,
-        num_train_epochs=1,  # Minimal epochs for demonstration
+        num_train_epochs=1,  
         logging_dir="./logs",
         logging_steps=10,
         save_steps=10,
@@ -55,7 +55,6 @@ def fine_tune_model():
         metric_for_best_model="accuracy",
     )
 
-    # Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -65,14 +64,14 @@ def fine_tune_model():
         compute_metrics=compute_metrics,
     )
 
-    # Fine-tune and log with MLflow
+    # Fine-tune,log  MLflow
     with mlflow.start_run(run_name="Fine-Tuning Emotion Model"):
         # Log training parameters
         mlflow.log_param("learning_rate", training_args.learning_rate)
         mlflow.log_param("epochs", training_args.num_train_epochs)
         mlflow.log_param("batch_size", training_args.per_device_train_batch_size)
 
-        # Fine-tune the model
+        # Fine-tune 
         trainer.train()
 
         # Log metrics

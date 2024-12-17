@@ -11,3 +11,5 @@ accelerate>=0.26.0
 pymongo
 datetime
 python-multipart
+python-jose
+passlib[bcrypt]
